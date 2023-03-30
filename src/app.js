@@ -18,13 +18,13 @@ const corsOrigin = process.env.CORS_ORIGIN || "http://localhost:3000"
 const mongoPath = process.env.MONGO_PATH || "mongodb://localhost:27017/weather-app"
 console.log("corsOrigin: ", corsOrigin);
 console.log("mongoPath: ", mongoPath);
-console.log("process.env.NODE_ENV: ", process.env.NODE_ENV);
+
 app.use(cors({origin: [corsOrigin]}));
 
 app.use(passport.initialize());
 passportConfig(passport);
 
-mongoose.connect(process.env.MONGO_PATH, { useNewUrlParser: true, useUnifiedTopology: true })
+mongoose.connect(mongoPath, { useNewUrlParser: true, useUnifiedTopology: true })
     .then(() => console.log("Connected to MongoDB"))
     .catch(err => console.error(err));
 
