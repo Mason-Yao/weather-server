@@ -15,6 +15,10 @@ const app = express();
 app.use(express.json());
 
 const corsOrigin = process.env.CORS_ORIGIN || "http://localhost:3000"
+const mongoPath = process.env.MONGO_PATH || "mongodb://localhost:27017/weather-app"
+console.log("corsOrigin: ", corsOrigin);
+console.log("mongoPath: ", mongoPath);
+console.log("process.env.NODE_ENV: ", process.env.NODE_ENV);
 app.use(cors({origin: [corsOrigin]}));
 
 app.use(passport.initialize());
