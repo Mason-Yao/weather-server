@@ -1,6 +1,6 @@
 const express = require("express");
 const router = express.Router();
-const weatherController = require("../controllers/weathercontroller");
+const weatherController = require("../controllers/weatherController");
 const authMiddleware = require("../middleware/authMiddleware")
 
 // get single city's weather data with the following requests.
