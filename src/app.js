@@ -19,7 +19,8 @@ const mongoPath = process.env.MONGO_PATH || "mongodb://localhost:27017/weather-a
 console.log("corsOrigin: ", corsOrigin);
 console.log("mongoPath: ", mongoPath);
 
-app.use(cors({origin: [corsOrigin]}));
+// app.use(cors({origin: [corsOrigin]}));
+app.use(cors());
 
 app.use(passport.initialize());
 passportConfig(passport);
