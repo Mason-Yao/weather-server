@@ -2,6 +2,7 @@ const mongoose = require("mongoose")
 
 const userSchema = new mongoose.Schema(
     {
+        "googleId": String,
         "firstName": {
             type: String,
             require: true
@@ -16,7 +17,6 @@ const userSchema = new mongoose.Schema(
         },
         "password": {
             type: String,
-            require: true
         },
         "cities": {
             type: [String]

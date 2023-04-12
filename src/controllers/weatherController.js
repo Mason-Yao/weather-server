@@ -11,6 +11,7 @@ exports.getWeather = (weatherStatus) => (async (req, res) => {
     try {
         const response = await axios
             .get(`https://api.weatherapi.com/v1/${weatherStatus}.json?key=${process.env.WEATHER_API_KEY}&q=${cityName}&days=10&aqi=no`)
+        // store the response in cache for 2 minutes
         cache.set(cityName, {...response.data, cityAlias: cityName}, 2 * 60 *1000)
         res.status(200).json({...response.data, cityAlias: cityName})
     } catch (err) {

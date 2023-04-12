@@ -39,8 +39,16 @@ exports.login = async (req, res) => {
         }
         const token = jwt.sign({id: user._id}, process.env.JWT_SECRET, {expiresIn: "1800s"})
         res.status(200).json({ message: "User logged in successfully.", token, user });
+
     } catch (err) {
         console.log(err)
         res.status(500).json({ message: "Server error" });
     }
 }
+
+exports.googleLoginCallback = (req, res) => {
+    const user = req.user;
+    const token = jwt.sign({id: user._id}, process.env.JWT_SECRET, {expiresIn: "1800s"})
+    res.redirect(`http://localhost:3000/login?token=${token}&user=${JSON.stringify(user)}`);
+}
+

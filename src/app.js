@@ -16,9 +16,6 @@ app.use(express.json());
 
 const corsOrigin = process.env.CORS_ORIGIN || "http://localhost:3000"
 const mongoPath = process.env.MONGO_PATH || "mongodb://localhost:27017/weather-app"
-console.log("corsOrigin: ", corsOrigin);
-console.log("mongoPath: ", mongoPath);
-
 // app.use(cors({origin: [corsOrigin]}));
 app.use(cors());
 
