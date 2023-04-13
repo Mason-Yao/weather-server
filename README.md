@@ -38,6 +38,6 @@ This is a backend application for [Weahter app](https://github.com/Mason-Yao/wea
    npm start dev
    ```
 
-5. The application should now be running on 
-   http://localhost:13000.
+5. The application should now be running on FRONTEND_URL with  default value http://localhost:13000 if no evironment variables passed over.
+   
 
