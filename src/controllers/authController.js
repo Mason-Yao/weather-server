@@ -48,7 +48,8 @@ exports.login = async (req, res) => {
 
 exports.googleLoginCallback = (req, res) => {
     const user = req.user;
+    const frontend = process.env.FRONTEND_URL || "http://localhost:3000";
     const token = jwt.sign({id: user._id}, process.env.JWT_SECRET, {expiresIn: "1800s"})
-    res.redirect(`http://localhost:3000/login?token=${token}&user=${JSON.stringify(user)}`);
+    res.redirect(`${frontend}/login?token=${token}&user=${JSON.stringify(user)}`);
 }
 
