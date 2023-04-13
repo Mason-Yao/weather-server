@@ -8,8 +8,8 @@ This is a backend application for [Weahter app](https://github.com/Mason-Yao/wea
 * Express
 * MongoDB
 * Mongoose
-* Passport.js local stratage
-* Passport.js Google OAuth2.0 stratage
+* Passport.js local stratege
+* Passport.js Google OAuth2.0 stratege
 * Weather API
 
 ## Getting Started
