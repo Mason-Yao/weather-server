@@ -1,0 +1,354 @@
+Parameters:
+  ProjectName:
+    Type: String
+    Description: Project Name which will be used as part of resource names
+    Default: weather
+
+  ServerImage:
+    Type: String
+    Description: Image URI for the server
+    Default: 518560753627.dkr.ecr.ap-southeast-2.amazonaws.com/weather-server:latest
+  
+  ApiKey:
+    Type: String
+    Description: API Key
+    Default: 379bede87183486ebba230021231503
+    NoEcho: true
+
+  VPC:
+    Type: AWS::EC2::VPC::Id
+    Description: Choose which VPC the Network Load Balancer should be deployed to
+
+  Subnets:
+    Description: Choose which subnets the Network Load Balancer should be deployed to
+    Type: List<AWS::EC2::Subnet::Id>
+
+  ServerPort:
+    Type: Number
+    Description: Port for the server, load balancer, and target group
+    Default: 13000
+
+  DomainName:
+    Type: String
+    Description: Domain name for the application
+    Default: xixi2020.com
+
+  
+
+Resources:
+  AppBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub ${ProjectName}.${DomainName}
+      AccessControl: PublicRead
+      WebsiteConfiguration:
+        IndexDocument: index.html
+        ErrorDocument: index.html
+
+  AppBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref AppBucket
+      PolicyDocument:
+        Statement:
+          - Sid: PublicReadGetObject
+            Effect: Allow
+            Principal: '*'
+            Action:
+              - s3:GetObject
+            Resource: !Sub arn:aws:s3:::${AppBucket}/*
+
+  Route53HostedZone:
+    Type: AWS::Route53::HostedZone
+    Properties:
+      Name: !Sub ${ProjectName}.${DomainName}
+
+  Route53RecordSet:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: !Ref Route53HostedZone
+      Name: !Sub ${ProjectName}.${DomainName}
+      Type: A
+      AliasTarget:
+      # defualt region is ap-southeast-2
+        HostedZoneId: Z1WCIGYICN2BYD
+        DNSName: s3-website-ap-southeast-2.amazonaws.com
+
+
+  ServerEcsCluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName: !Sub ${ProjectName}-ecs-cluster
+      ServiceConnectDefaults:
+        Namespace: !Ref ProjectName
+
+  ECSTaskExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ecs-tasks.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Path: /
+      Policies:
+        - PolicyName: ECSTaskRolePolicy
+          PolicyDocument:
+            Statement:
+              - Effect: Allow
+                Action:
+                - 'ecr:GetAuthorizationToken'
+                - 'ecr:BatchCheckLayerAvailability'
+                - 'ecr:GetDownloadUrlForLayer'
+                - 'ecr:BatchGetImage'
+                - 'logs:CreateLogStream'
+                - 'logs:PutLogEvents'
+                - 'logs:CreateLogGroup'
+                - 'elasticfilesystem:*'
+                - 'efs:*'
+                Resource: '*'
+
+
+  ServerEcsTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    DependsOn:
+      - DbEcsService
+    Properties:
+      Family: !Sub ${ProjectName}-server-ecs-task
+      Cpu: 1024
+      Memory: 4096
+      NetworkMode: awsvpc
+      RequiresCompatibilities:
+        - FARGATE
+      ExecutionRoleArn: !GetAtt ECSTaskExecutionRole.Arn
+      ContainerDefinitions:
+        - Name: server
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Sub ${ProjectName}-server-ecs-task
+              awslogs-region: ap-southeast-2
+              awslogs-create-group: 'true'
+              awslogs-stream-prefix: server
+          Image: !Ref ServerImage
+          PortMappings:
+            - ContainerPort: !Ref ServerPort
+              Protocol: tcp
+          Environment:
+            - Name: WEATHER_API_KEY
+              Value: !Ref ApiKey
+            - Name: CORS_ORIGIN
+              Value: !Ref Route53RecordSet
+            - Name: MONGO_PATH
+              Value: 'mongodb://db:27017/weather'
+            - Name: JWT_SECRET
+              Value: 'mySecret'
+            - Name: 'FRONTEND_URL'
+              Value: !GetAtt AppBucket.WebsiteURL
+
+  EFSSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: !Sub ${ProjectName} EFS Security Group
+      VpcId: !Ref VPC
+
+
+  DbSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: !Sub ${ProjectName} DB Security Group
+      VpcId: !Ref VPC
+  
+  EFSIngressRule:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref EFSSecurityGroup
+      IpProtocol: tcp
+      FromPort: 2049
+      ToPort: 2049
+      SourceSecurityGroupId: !Ref DbSecurityGroup
+
+  DbEgressRule:
+    Type: AWS::EC2::SecurityGroupEgress
+    Properties:
+      GroupId: !Ref DbSecurityGroup
+      IpProtocol: tcp
+      FromPort: 2049
+      ToPort: 2049
+      DestinationSecurityGroupId: !Ref EFSSecurityGroup
+
+
+  EFSFileSystem:
+    Type: AWS::EFS::FileSystem
+    Properties:
+      Encrypted: true
+      PerformanceMode: generalPurpose
+      ThroughputMode: bursting
+      FileSystemTags:
+        - Key: Name
+          Value: !Sub ${ProjectName} EFS
+
+  EFSMountTarget1:
+    Type: AWS::EFS::MountTarget
+    Properties:
+      FileSystemId: !Ref EFSFileSystem
+      SecurityGroups:
+        - !Ref EFSSecurityGroup
+      SubnetId: !Select [0, !Ref Subnets]
+
+  EFSMountTarget2:
+    Type: AWS::EFS::MountTarget
+    Properties:
+      FileSystemId: !Ref EFSFileSystem
+      SecurityGroups:
+        - !Ref EFSSecurityGroup
+      SubnetId: !Select [1, !Ref Subnets]
+
+  EFSMountTarget3:
+    Type: AWS::EFS::MountTarget
+    Properties:
+      FileSystemId: !Ref EFSFileSystem
+      SecurityGroups:
+        - !Ref EFSSecurityGroup
+      SubnetId: !Select [2, !Ref Subnets]
+
+  EFSAccessPoint:
+    Type: AWS::EFS::AccessPoint
+    Properties:
+      FileSystemId: !Ref EFSFileSystem
+
+  DBEcsTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: !Sub ${ProjectName}-db-ecs-task
+      Cpu: 1024
+      Memory: 4096
+      NetworkMode: awsvpc
+      RequiresCompatibilities:
+        - FARGATE
+      ExecutionRoleArn: !GetAtt ECSTaskExecutionRole.Arn
+      TaskRoleArn: !GetAtt ECSTaskExecutionRole.Arn
+      ContainerDefinitions:
+        - Name: db
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Sub ${ProjectName}-server-ecs-task
+              awslogs-region: ap-southeast-2
+              awslogs-create-group: 'true'
+              awslogs-stream-prefix: server
+          Image: mongo
+          PortMappings:
+            - ContainerPort: 27017
+              Name: db
+          MountPoints:
+            - SourceVolume: mongodb-data
+              ContainerPath: /data/db
+      Volumes:
+        - Name: mongodb-data
+          EFSVolumeConfiguration:
+            FilesystemId: !Ref EFSFileSystem
+            TransitEncryption: ENABLED
+            AuthorizationConfig:
+              AccessPointId: !Ref EFSAccessPoint
+              IAM: ENABLED
+     
+  SecurityGroupAllowAll:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow all inbound traffic
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 0
+          ToPort: 65535
+          CidrIp: 0.0.0.0/0
+
+  ServerLoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: !Sub ${ProjectName}-server-load-balancer
+      Type: application
+      Subnets: !Ref Subnets
+      SecurityGroups:
+        - !Ref SecurityGroupAllowAll
+        - sg-0718a8dab0f729b65
+
+  ServerTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    DependsOn: ServerLoadBalancer
+    Properties:
+      HealthCheckPath: /user
+      Matcher:
+        HttpCode: 401
+      VpcId: !Ref VPC
+      Port: !Ref ServerPort
+      Protocol: HTTP
+      TargetType: ip
+
+  ServerListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties: 
+      DefaultActions:
+      - Type: forward
+        TargetGroupArn: !Ref ServerTargetGroup
+      LoadBalancerArn: !Ref ServerLoadBalancer
+      Port: !Ref ServerPort
+      Protocol: HTTP
+
+  ServerEcsService:
+    Type: AWS::ECS::Service
+    Properties:
+      Cluster: !Ref ServerEcsCluster
+      TaskDefinition: !Ref ServerEcsTaskDefinition
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          Subnets: !Ref Subnets
+          AssignPublicIp: ENABLED
+      DesiredCount: 1
+      LaunchType: FARGATE
+      LoadBalancers:
+        - ContainerName: server
+          ContainerPort: !Ref ServerPort
+          TargetGroupArn: !Ref ServerTargetGroup
+      ServiceConnectConfiguration:
+        Enabled: true
+        Namespace: !Ref ProjectName
+      
+  DbEcsService:
+    DependsOn:
+      - EFSMountTarget1
+      - EFSMountTarget2
+      - EFSMountTarget3
+    Type: AWS::ECS::Service
+    Properties:
+      Cluster: !Ref ServerEcsCluster
+      TaskDefinition: !Ref DBEcsTaskDefinition
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          Subnets: !Ref Subnets
+          AssignPublicIp: ENABLED
+          SecurityGroups:
+            - !Ref DbSecurityGroup
+            # Default security group for the VPC
+            - sg-0718a8dab0f729b65
+      DesiredCount: 1
+      LaunchType: FARGATE
+      ServiceConnectConfiguration:
+        Enabled: true
+        Namespace: !Ref ProjectName
+        Services:
+          - ClientAliases:
+              - Port: 27017
+                DnsName: db
+            PortName: db
+
+Outputs:
+  ServerLoadBalancerDNS:
+    Description: The DNS name of the load balancer
+    Value: !GetAtt ServerLoadBalancer.DNSName
+    Export:
+      Name: !Sub ${AWS::StackName}-ServerLoadBalancerDNS
